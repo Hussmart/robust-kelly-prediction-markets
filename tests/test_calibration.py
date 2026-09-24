@@ -10,7 +10,11 @@ from sklearn.linear_model import LogisticRegression
 from src.calibration.isotonic import IsotonicCalibrator, pava
 from src.calibration.platt_scaling import PlattCalibrator, _logit, _sigmoid
 from src.calibration.reliability_diagrams import (
-    brier_score, cluster_bootstrap_predict, expected_calibration_error, log_loss, reliability_table,
+    brier_score,
+    cluster_bootstrap_predict,
+    expected_calibration_error,
+    log_loss,
+    reliability_table,
 )
 
 

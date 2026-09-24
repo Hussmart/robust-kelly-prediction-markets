@@ -33,7 +33,7 @@ def test_sharpe_like_edge_cases():
 
 def test_summarize_keys_and_empty():
     s = mt.summarize(np.array([0.1, -0.1, 0.2]))
-    assert s["win_rate"] == pytest.approx(2 / 3) and s["worst_round"] == -0.1
+    assert s["frac_rounds_positive"] == pytest.approx(2 / 3) and s["worst_round"] == -0.1
     assert mt.summarize(np.array([]))["rounds"] == 0.0
 
 

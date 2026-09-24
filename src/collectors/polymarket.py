@@ -24,6 +24,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import requests
 
 from src.collectors.cache import HttpClient, ParquetCache
 
@@ -35,6 +36,8 @@ DATA_URL = "https://data-api.polymarket.com"
 
 PRICE_CHUNK_SECONDS = 6 * 24 * 3600
 TRADES_PAGE = 500
+GAMMA_PAGE = 100
+GAMMA_MAX_OFFSET = 2000
 TRADES_MAX_OFFSET = 10_000
 
 MARKET_COLUMNS = [
@@ -106,7 +109,8 @@ def _normalise_trades(rows: list[dict[str, Any]]) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame(columns=TRADE_COLUMNS)
     df = pd.DataFrame(rows)
-    df = df.drop_duplicates(subset=["transactionHash", "asset", "side", "size", "price", "timestamp"])
+    key = ["transactionHash", "asset", "side", "size", "price", "timestamp"]
+    df = df.drop_duplicates(subset=key + (["proxyWallet"] if "proxyWallet" in df else []))
     is_yes = df["outcomeIndex"].astype(int) == 0
     price = df["price"].astype(float)
     size = df["size"].astype(float)
@@ -136,7 +140,8 @@ class PolymarketCollector:
         def fetch() -> pd.DataFrame:
             raw = self.client.get_json(f"{GAMMA_URL}/markets/{market_id}")
             return pd.DataFrame([normalise_market(raw)])
-        return self.cache.get_or_fetch("polymarket/markets", str(market_id), fetch).iloc[0].to_dict()
+        row: dict[str, Any] = self.cache.get_or_fetch("polymarket/markets", str(market_id), fetch).iloc[0].to_dict()
+        return row
 
     def get_event_markets(self, event_slug: str) -> pd.DataFrame:
         """Return all markets of an event (e.g. ``fed-decision-in-december``), cached."""
@@ -154,37 +159,55 @@ class PolymarketCollector:
         self,
         end_date_min: str,
         end_date_max: str,
-        volume_min: float = 50_000.0,
+        volume_min: float | None = 50_000.0,
         tag_slug: str | None = None,
         max_markets: int = 2_000,
+        window_days: int | None = None,
     ) -> pd.DataFrame:
         """List resolved binary YES/NO markets ending in ``[end_date_min, end_date_max]``.
 
-        Used to build the calibration set. Only markets with a clean 0/1 resolution and
-        at least ``volume_min`` USDC of volume are kept.
+        Only markets with a clean 0/1 resolution are kept. ``volume_min`` filters on *lifetime*
+        volume, which is future information relative to any decision taken before the market
+        closes (a cheap market that later resolves YES trades at high prices and so accumulates
+        more dollar volume). Pass ``volume_min=None`` for studies that must not select on it.
+        ``window_days`` switches from monthly to fixed-length listing windows (needed to enumerate
+        an unfiltered population, because the API rejects offsets beyond ~2,000 per window).
         """
-        key = f"{end_date_min}_{end_date_max}_{volume_min:.0f}_{tag_slug}_{max_markets}"
+        vol_key = "none" if volume_min is None else f"{volume_min:.0f}"
+        key = f"{end_date_min}_{end_date_max}_{vol_key}_{tag_slug}_{max_markets}_{window_days}"
 
         def fetch() -> pd.DataFrame:
+            # The API rejects offsets beyond ~2,000 (HTTP 422), so walk month by month.
+            freq = "MS" if window_days is None else f"{window_days}D"
+            edges = pd.date_range(end_date_min, end_date_max, freq=freq, tz="UTC").tolist()
+            edges = [pd.Timestamp(end_date_min, tz="UTC")] + [e for e in edges if e > pd.Timestamp(end_date_min, tz="UTC")]
+            edges.append(pd.Timestamp(end_date_max, tz="UTC") + pd.Timedelta(days=1))
             rows: list[dict[str, Any]] = []
-            offset = 0
-            while len(rows) < max_markets:
-                params: dict[str, Any] = {
-                    "closed": "true", "limit": 500, "offset": offset,
-                    "end_date_min": end_date_min, "end_date_max": end_date_max,
-                    "volume_num_min": volume_min, "order": "volumeNum", "ascending": "false",
-                }
-                if tag_slug:
-                    params["tag_slug"] = tag_slug
-                page = self.client.get_json(f"{GAMMA_URL}/markets", params)
-                if not page:
-                    break
-                rows.extend(normalise_market(m) for m in page)
-                offset += len(page)
-                if len(page) < 500:
-                    break
+            for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+                offset = 0
+                while offset < GAMMA_MAX_OFFSET:
+                    params: dict[str, Any] = {
+                        "closed": "true", "limit": GAMMA_PAGE, "offset": offset,
+                        "end_date_min": lo.strftime("%Y-%m-%d"), "end_date_max": hi.strftime("%Y-%m-%d"),
+                        "order": "volumeNum", "ascending": "false",
+                    }
+                    if volume_min is not None:
+                        params["volume_num_min"] = volume_min
+                    if tag_slug:
+                        params["tag_slug"] = tag_slug
+                    try:
+                        page = self.client.get_json(f"{GAMMA_URL}/markets", params)
+                    except requests.HTTPError as exc:
+                        if exc.response is not None and exc.response.status_code == 422:
+                            break  # offset cap reached for this window
+                        raise
+                    if not page:  # the API caps the page size, so only an empty page ends a window
+                        break
+                    rows.extend(normalise_market(m) for m in page)
+                    offset += len(page)
             df = pd.DataFrame(rows, columns=MARKET_COLUMNS)
-            return df.dropna(subset=["outcome", "yes_token_id"]).head(max_markets).reset_index(drop=True)
+            df = df.dropna(subset=["outcome", "yes_token_id"]).drop_duplicates("market_id")
+            return df.sort_values("volume", ascending=False).head(max_markets).reset_index(drop=True)
 
         return self.cache.get_or_fetch("polymarket/resolved_lists", key, fetch)
 

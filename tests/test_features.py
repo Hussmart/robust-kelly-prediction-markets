@@ -137,3 +137,13 @@ def test_persistence_label():
     assert lab[1] == 0.0          # 0.04 -> 0.001
     assert np.isnan(lab[5])       # below min_div
     assert np.isnan(lab[7])       # no snapshot 24h ahead
+
+
+def test_kalshi_zero_bid_quote_is_valid_but_empty_book_is_not():
+    """A (0, 0.02) quote on a long shot is real (mid 1c); the empty (0, 1) book is not."""
+    c = pd.DataFrame({"ts": [1, 2, 3], "price": [0.05, 0.05, 0.05], "yes_bid": [0.0, 0.0, 0.03],
+                      "yes_ask": [0.02, 1.0, 0.03], "volume": [0, 0, 0], "open_interest": [1, 1, 1]})
+    q = fe.kalshi_implied_price(c)
+    assert q.p[0] == pytest.approx(0.01) and q.spread[0] == pytest.approx(0.02)
+    assert q.p[1] == pytest.approx(0.05) and np.isnan(q.spread[1])       # empty book -> last trade
+    assert q.p[2] == pytest.approx(0.05) and np.isnan(q.spread[2])       # crossed/locked -> last trade

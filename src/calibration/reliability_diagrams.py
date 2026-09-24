@@ -25,8 +25,13 @@ import numpy as np
 class Calibrator(Protocol):
     """Anything with ``fit(p, y)`` returning self and ``predict(p)``."""
 
-    def fit(self, p: np.ndarray, y: np.ndarray) -> "Calibrator": ...
-    def predict(self, p: np.ndarray) -> np.ndarray: ...
+    def fit(self, p: np.ndarray, y: np.ndarray) -> "Calibrator":
+        """Fit the calibration map on prices ``p`` and binary outcomes ``y``."""
+        ...
+
+    def predict(self, p: np.ndarray) -> np.ndarray:
+        """Return calibrated probabilities for prices ``p``."""
+        ...
 
 
 def brier_score(q: np.ndarray, y: np.ndarray) -> float:

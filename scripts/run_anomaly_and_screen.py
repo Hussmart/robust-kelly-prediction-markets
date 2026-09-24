@@ -32,7 +32,7 @@ def walk_forward_scores(features: pd.DataFrame, z_min: float = 2.0) -> pd.DataFr
     order = features.groupby("meeting").event_time.first().sort_values()
     start = features.groupby("meeting").ts.min()
     parts = []
-    for m, t_event in order.items():
+    for m in order.index:
         train_meetings = [k for k, t in order.items() if t < pd.Timestamp(start[m], unit="s", tz="UTC")]
         cur = features[features.meeting == m].copy()
         if len(train_meetings) < MIN_TRAIN_MEETINGS:
@@ -72,15 +72,33 @@ def main() -> None:
     print(summary.T.to_string(header=False))
 
     lab = ok.dropna(subset=["persistent"])
-    print("\nPersistence rate of >=2c divergences (label mean) by flag:")
+    rows = []
     for name in ("if_flag", "price_signal", "liquidity_signal", "consensus"):
-        g = lab.groupby(lab[name].astype(bool)).persistent.agg(["mean", "count"]).round(3)
-        print(f"  {name}:", g.to_dict("index"))
+        for val, g in lab.groupby(lab[name].astype(bool)):
+            rows.append({"detector": name, "flag": bool(val), "n": len(g), "persistent_rate": float(g.persistent.mean())})
+    persistence = pd.DataFrame(rows)
+    persistence.to_csv(ROOT / "results" / "anomaly_persistence.csv", index=False)
+    print("\nPersistence rate of >=2c divergences 24h later, by detector flag:")
+    print(persistence.round(3).to_string(index=False))
+
+    # Divergence at the decision time (24 h before the announcement) - quoted in the README.
+    dec = features[(features.hours_to_close - 24).abs() <= 3].copy()
+    dec = dec.loc[dec.assign(g=(dec.hours_to_close - 24).abs()).groupby("pair_id").g.idxmin()]
+    decision_stats = pd.DataFrame({"pairs": [len(dec)], "mean_abs_div": [dec.abs_div.mean()],
+                                   "median_abs_div": [dec.abs_div.median()], "pairs_ge_2c": [int((dec.abs_div >= 0.02).sum())]})
+    decision_stats.to_csv(ROOT / "results" / "decision_time_divergence.csv", index=False)
+    print("\nDecision-time divergence:", decision_stats.round(4).to_dict("records")[0])
 
     warnings.filterwarnings("ignore")
     screen = run_screen(features)
     screen.to_csv(ROOT / "results" / "lazypredict_screen.csv")
-    print("\nLazyPredict screen (chronological test meetings):")
+    from src.baseline.lazypredict_screen import chronological_split, prepare_screen_data
+
+    train, test = chronological_split(prepare_screen_data(features))
+    pd.DataFrame({"train_snapshots": [len(train)], "test_snapshots": [len(test)], "test_meetings": [test.meeting.nunique()],
+                  "test_persistent_rate": [float(test.persistent.mean())]}).to_csv(
+        ROOT / "results" / "lazypredict_test_size.csv", index=False)
+    print(f"\nLazyPredict screen (chronological test: {len(test)} snapshots, {test.meeting.nunique()} meetings):")
     print(screen.head(12).round(3).to_string())
 
 

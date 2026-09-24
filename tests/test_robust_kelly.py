@@ -167,3 +167,8 @@ def test_input_validation():
 
 def test_net_odds():
     np.testing.assert_allclose(net_odds(np.array([0.5, 0.25])), [1.0, 3.0])
+
+
+def test_result_reports_optimality_and_time_limit_is_not_silent():
+    rob = solve_robust_kelly(P_HAT, PRICE, DEV, gamma=1, f_max=F_MAX)
+    assert rob.optimal and rob.status.endswith("optimal")

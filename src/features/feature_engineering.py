@@ -67,12 +67,14 @@ def asof(grid: np.ndarray, ts: np.ndarray, values: np.ndarray, max_age_h: float)
 def kalshi_implied_price(candles: pd.DataFrame, max_spread: float = 0.5) -> pd.DataFrame:
     """Kalshi YES probability per candle: quote mid if a valid 2-sided quote exists, else last trade.
 
-    A quote is valid when ``0 < bid < ask < 1`` and ``ask - bid <= max_spread``. Returns
-    ``ts, p, spread`` where ``spread`` is NaN for invalid quotes.
+    A quote is valid when ``0 <= bid < ask <= 1``, ``ask - bid <= max_spread`` and the book is
+    not the empty ``(0, 1)`` book. A zero bid with a small ask is a legitimate quote for a
+    long-shot contract, so it must not be discarded (it would bias long-shot prices toward
+    stale last trades). Returns ``ts, p, spread`` where ``spread`` is NaN for invalid quotes.
     """
     bid, ask = candles["yes_bid"].to_numpy(float), candles["yes_ask"].to_numpy(float)
     with np.errstate(invalid="ignore"):
-        valid = (bid > 0) & (ask < 1) & (ask > bid) & (ask - bid <= max_spread)
+        valid = (bid >= 0) & (ask <= 1) & (ask > bid) & (ask - bid <= max_spread)
     mid = np.where(valid, (bid + ask) / 2.0, candles["price"].to_numpy(float))
     return pd.DataFrame({
         "ts": candles["ts"].to_numpy(np.int64),

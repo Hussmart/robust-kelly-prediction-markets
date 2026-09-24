@@ -35,10 +35,10 @@ def build_equivalence_graph(mapping: pd.DataFrame) -> nx.Graph:
     """Bipartite graph with one edge per equivalent pair.
 
     Nodes are ``("poly", market_id)`` / ``("kalshi", ticker)`` with attribute ``bipartite``
-    0 / 1. Edges carry ``pair_id`` and ``meeting``. Contracts of the same meeting are
-    mutually exclusive, so each meeting forms one connected group of edges only through
-    shared *event* membership, not through shared nodes. The graph therefore is a perfect
-    matching (max degree 1), which ``validate_graph`` asserts.
+    0 / 1. Edges carry ``pair_id``, ``meeting`` and ``bucket``. Every contract has exactly one
+    equivalent twin, so the graph is a perfect matching (all degrees equal 1), which
+    ``validate_graph`` asserts. Contracts of one meeting are mutually exclusive but are not
+    connected to each other in this graph.
     """
     g = nx.Graph()
     for r in mapping.itertuples(index=False):

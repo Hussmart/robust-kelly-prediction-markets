@@ -64,6 +64,8 @@ class RobustKellyResult:
         worst_case_growth: exact (not piecewise-linear) worst-case growth of ``f``.
         gamma: uncertainty budget used.
         status: solver termination condition.
+        optimal: True if HiGHS proved optimality (within ``mip_gap``); False if it stopped at
+            the time limit with a feasible incumbent.
     """
 
     f: np.ndarray
@@ -71,6 +73,7 @@ class RobustKellyResult:
     worst_case_growth: float
     gamma: float
     status: str
+    optimal: bool = True
 
 
 def _grid(f_max: float, n_segments: int) -> np.ndarray:
@@ -172,7 +175,11 @@ def solve_robust_kelly(
     solver = pyo.SolverFactory("appsi_highs")
     solver.config.time_limit = time_limit
     solver.config.mip_gap = mip_gap
-    res = solver.solve(m, load_solutions=True)
+    res = solver.solve(m, load_solutions=False)
+    condition = res.solver.termination_condition
+    if condition not in (pyo.TerminationCondition.optimal, pyo.TerminationCondition.maxTimeLimit):
+        raise RuntimeError(f"robust Kelly MILP did not solve: {condition}")
+    m.solutions.load_from(res)
     f = np.array([sum(df[k] * pyo.value(m.delta[i, k]) for k in range(n_segments)) for i in range(n)])
     f = np.clip(f, 0.0, f_max)
     return RobustKellyResult(
@@ -180,5 +187,6 @@ def solve_robust_kelly(
         objective=float(pyo.value(m.obj)),
         worst_case_growth=worst_case_growth(f, p_hat, c, d, gamma),
         gamma=float(gamma),
-        status=str(res.solver.termination_condition),
+        status=str(condition),
+        optimal=condition == pyo.TerminationCondition.optimal,
     )

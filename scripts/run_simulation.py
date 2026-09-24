@@ -101,7 +101,7 @@ def main() -> None:
     axes[0].set(xlabel=r"allocator uncertainty budget $\Gamma$", ylabel="mean true log-growth per round",
                 title="Robust Kelly vs. how many estimates are actually bad")
     axes[0].legend(fontsize=8)
-    for k, ls in zip(K_BAD, ["-", "--", "-.", ":"]):
+    for k in K_BAD:
         for strat, colour in [("naive_kelly", "C3"), ("equal_weight", "C2")]:
             axes[1].plot([k], [piv.loc[strat, k]], "s", color=colour, label=strat if k == 0 else None)
         best = max(GAMMAS, key=lambda g: piv.loc[f"robust_G{g}", k])

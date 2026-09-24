@@ -168,3 +168,10 @@ def test_kalshi_tier_empty_then_404_returns_empty(tmp_path):
     assert k._tiered(True, live=missing, hist=lambda: []) == []
     with pytest.raises(requests.HTTPError):
         k._tiered(True, live=missing, hist=missing)
+
+
+def test_polymarket_identical_fills_from_different_wallets_are_kept():
+    base = {"transactionHash": "h", "asset": "a", "timestamp": 100, "size": 10.0, "outcomeIndex": 0,
+            "side": "BUY", "price": 0.6}
+    rows = [dict(base, proxyWallet="w1"), dict(base, proxyWallet="w2"), dict(base, proxyWallet="w2")]
+    assert len(polymarket._normalise_trades(rows)) == 2          # exact duplicate removed, distinct wallets kept

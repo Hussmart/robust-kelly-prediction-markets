@@ -102,7 +102,7 @@ def _normalise_trades(rows: list[dict[str, Any]]) -> pd.DataFrame:
     no_price = df["no_price_dollars"].astype(float)
     size = df["count_fp"].astype(float)
     taker_yes = df["taker_side"] == "yes"
-    notional = size * np.where(taker_yes, yes_price, no_price)
+    notional: pd.Series = size * np.where(taker_yes, yes_price, no_price)
     out = pd.DataFrame({
         "ts": _epoch_seconds(df["created_time"]),
         "yes_price": yes_price,
@@ -169,7 +169,8 @@ class KalshiCollector:
                 lambda: self.client.get_json(f"{BASE_URL}/historical/markets/{ticker}"),
             )
             return pd.DataFrame([normalise_market(raw["market"])])
-        return self.cache.get_or_fetch("kalshi/markets", ticker, fetch).iloc[0].to_dict()
+        row: dict[str, Any] = self.cache.get_or_fetch("kalshi/markets", ticker, fetch).iloc[0].to_dict()
+        return row
 
     def _paginate(self, url: str, params: dict[str, Any], key: str) -> list[dict[str, Any]]:
         """Follow Kalshi's cursor pagination, concatenating ``key`` lists."""
@@ -212,9 +213,9 @@ class KalshiCollector:
                 params = {"start_ts": lo, "end_ts": hi, "period_interval": period_minutes}
                 data = self._tiered(
                     self._is_historical(close_time),
-                    lambda: self.client.get_json(
+                    lambda params=params: self.client.get_json(
                         f"{BASE_URL}/series/{series}/markets/{ticker}/candlesticks", params),
-                    lambda: self.client.get_json(
+                    lambda params=params: self.client.get_json(
                         f"{BASE_URL}/historical/markets/{ticker}/candlesticks", params),
                     is_empty=lambda d: not d.get("candlesticks"),
                 )

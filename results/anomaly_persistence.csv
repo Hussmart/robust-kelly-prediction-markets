@@ -1,0 +1,9 @@
+detector,flag,n,persistent_rate
+if_flag,False,294,0.7108843537414966
+if_flag,True,2,0.0
+price_signal,False,272,0.7205882352941176
+price_signal,True,24,0.5416666666666666
+liquidity_signal,False,43,0.46511627906976744
+liquidity_signal,True,253,0.7470355731225297
+consensus,False,278,0.7122302158273381
+consensus,True,18,0.6111111111111112

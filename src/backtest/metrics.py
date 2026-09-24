@@ -47,7 +47,7 @@ def sharpe_like(log_returns: np.ndarray, periods_per_year: float = 8.0) -> float
 
 
 def summarize(log_returns: np.ndarray, periods_per_year: float = 8.0) -> dict[str, float]:
-    """All headline metrics for one strategy, plus hit rate and worst round."""
+    """All headline metrics for one strategy, plus the fraction of rounds with positive log-return (rounds with no bet count as not positive) and worst round."""
     r = np.asarray(log_returns, dtype=float)
     return {
         "rounds": float(len(r)),
@@ -56,6 +56,59 @@ def summarize(log_returns: np.ndarray, periods_per_year: float = 8.0) -> dict[st
         "mean_log_return": float(np.mean(r)) if len(r) else float("nan"),
         "max_drawdown": max_drawdown(r) if len(r) else float("nan"),
         "sharpe_like": sharpe_like(r, periods_per_year),
-        "win_rate": float(np.mean(r > 0)) if len(r) else float("nan"),
+        "frac_rounds_positive": float(np.mean(r > 0)) if len(r) else float("nan"),
         "worst_round": float(np.min(r)) if len(r) else float("nan"),
+    }
+
+
+def paired_bootstrap_diff(
+    a: np.ndarray, b: np.ndarray, n_boot: int = 5000, alpha: float = 0.10, seed: int = 0
+) -> dict[str, float]:
+    """Bootstrap the difference in cumulative log-growth ``sum(a) - sum(b)`` over rounds.
+
+    Rounds are resampled *jointly* (the same rounds for both strategies), which respects the
+    pairing: both strategies face the same markets in every round. Returns the observed
+    difference, a ``1 - alpha`` percentile interval and the bootstrap probability that the
+    difference is positive. With few rounds the interval is wide, which is the point.
+    """
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    if a.shape != b.shape or a.ndim != 1 or len(a) == 0:
+        raise ValueError("a and b must be equal-length non-empty 1-D arrays")
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(a), size=(n_boot, len(a)))
+    diffs = (a[idx] - b[idx]).sum(axis=1)
+    return {
+        "observed": float(np.sum(a - b)),
+        "lo": float(np.quantile(diffs, alpha / 2)),
+        "hi": float(np.quantile(diffs, 1 - alpha / 2)),
+        "prob_positive": float(np.mean(diffs > 0)),
+    }
+
+
+def paired_bootstrap_stat(
+    a: np.ndarray, b: np.ndarray, stat, n_boot: int = 3000, alpha: float = 0.10, seed: int = 0
+) -> dict[str, float]:
+    """Bootstrap ``stat(a) - stat(b)`` for any statistic of a return series.
+
+    Rounds are resampled jointly (same indices for both strategies) and the statistic is
+    recomputed on each resample, e.g. ``max_drawdown`` or ``sharpe_like``. Resampling rounds i.i.d.
+    ignores serial dependence, which is acceptable for cohorts that do not overlap in time but
+    is an approximation for drawdowns.
+    """
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    if a.shape != b.shape or a.ndim != 1 or len(a) == 0:
+        raise ValueError("a and b must be equal-length non-empty 1-D arrays")
+    rng = np.random.default_rng(seed)
+    diffs = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, len(a), size=len(a))
+        va, vb = stat(a[idx]), stat(b[idx])
+        if np.isfinite(va) and np.isfinite(vb):
+            diffs.append(va - vb)
+    d = np.asarray(diffs)
+    return {
+        "observed": float(stat(a) - stat(b)),
+        "lo": float(np.quantile(d, alpha / 2)),
+        "hi": float(np.quantile(d, 1 - alpha / 2)),
+        "prob_positive": float(np.mean(d > 0)),
     }

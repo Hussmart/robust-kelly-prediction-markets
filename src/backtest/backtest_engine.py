@@ -26,6 +26,7 @@ would actually have happened.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -105,8 +106,9 @@ def decision_snapshots(features: pd.DataFrame, cfg: BacktestConfig) -> pd.DataFr
     return f.loc[f.groupby("pair_id").gap.idxmin()].drop(columns="gap")
 
 
-def build_rounds(features: pd.DataFrame, cfg: BacktestConfig = BacktestConfig()) -> list[Round]:
+def build_rounds(features: pd.DataFrame, cfg: BacktestConfig | None = None) -> list[Round]:
     """Walk-forward construction of the candidate bets of every meeting."""
+    cfg = cfg or BacktestConfig()
     feats = features.copy()
     feats["mid"] = 0.5 * (feats.p_poly + feats.p_kalshi)
     meeting_time = feats.groupby("meeting").event_time.first().sort_values()
@@ -181,7 +183,7 @@ def equal_weight(n: int, budget: float, f_max: float) -> np.ndarray:
 
 def run_backtest(
     rounds: list[Round],
-    cfg: BacktestConfig = BacktestConfig(),
+    cfg: BacktestConfig | None = None,
     gammas: tuple[float, ...] = (0.0, 1.0, 2.0),
     n_random: int = 500,
 ) -> BacktestResult:
@@ -191,8 +193,9 @@ def run_backtest(
     clipped to the round's number of bets ``N``), ``equal_weight``, and ``random`` (mean
     log-return over ``n_random`` random subsets with random stakes).
     """
+    cfg = cfg or BacktestConfig()
     rng = np.random.default_rng(cfg.seed)
-    rows: list[dict[str, float]] = []
+    rows: list[dict[str, Any]] = []
     for r in rounds:
         n = len(r.p_hat)
         row: dict[str, float] = {"meeting": r.meeting, "n_bets": n}
