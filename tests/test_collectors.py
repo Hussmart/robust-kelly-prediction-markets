@@ -157,3 +157,14 @@ def test_live_dec_2025_fomc_markets(tmp_path):
     ks = kalshi.KalshiCollector(cache=ParquetCache(tmp_path))
     assert pm.get_market("570361")["outcome"] == 1.0
     assert ks.get_market("KXFEDDECISION-25DEC-C25")["outcome"] == 1.0
+
+
+def test_kalshi_tier_empty_then_404_returns_empty(tmp_path):
+    k = kalshi.KalshiCollector(cache=ParquetCache(tmp_path))
+
+    def missing() -> Any:
+        raise _http_error(404)
+
+    assert k._tiered(True, live=missing, hist=lambda: []) == []
+    with pytest.raises(requests.HTTPError):
+        k._tiered(True, live=missing, hist=missing)

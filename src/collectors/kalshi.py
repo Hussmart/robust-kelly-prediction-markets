@@ -134,15 +134,26 @@ class KalshiCollector:
         self, historical_first: bool, live: Callable[[], Any], hist: Callable[[], Any],
         is_empty: Callable[[Any], bool] = lambda r: not r,
     ) -> Any:
-        """Call the preferred tier; on HTTP 404 or an empty result, fall back to the other."""
+        """Call the preferred tier; on HTTP 404 or an empty result, fall back to the other.
+
+        If the preferred tier returned an empty result and the other tier 404s, the empty
+        result is returned (e.g. a window with no candles). A 404 from both tiers is raised.
+        """
         order = (hist, live) if historical_first else (live, hist)
+        result = None
         try:
             result = order[0]()
         except requests.HTTPError as exc:
             if exc.response is None or exc.response.status_code != 404:
                 raise
+        if result is not None and not is_empty(result):
+            return result
+        try:
             return order[1]()
-        return order[1]() if is_empty(result) else result
+        except requests.HTTPError as exc:
+            if result is None or exc.response is None or exc.response.status_code != 404:
+                raise
+            return result
 
     def _is_historical(self, close_time: pd.Timestamp | None) -> bool:
         """Guess the tier from the close time (the 404 fallback corrects wrong guesses)."""

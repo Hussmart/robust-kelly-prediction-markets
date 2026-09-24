@@ -20,3 +20,5 @@ data/processed/
 Thumbs.db
 .vscode/
 .idea/
+docs/methodology.full.md
+results/.tmp/
