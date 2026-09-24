@@ -254,3 +254,24 @@ and the objective are then linear in $\delta$. The result is a MILP solved with 
   mutually exclusive bet of a round loses.
 * Fees, spread and slippage are lumped into a constant cost $\kappa$ added to the price.
 
+---
+
+## 6. Backtest (`src/backtest/`)
+
+*Rounds and walk-forward calibration.* One round is one FOMC meeting, decided 24 h before
+the announcement. For meeting $m$, the calibrator (and the consensus thresholds) are fitted
+on snapshots of meetings that had **resolved before that decision time**. The first 6
+meetings are burn-in. `test_future_outcomes_do_not_change_past_decisions` checks that flipping
+the last meeting's outcomes changes no earlier round.
+
+*Candidates.* The pooled price $\bar p = (p^P + p^K)/2$ is calibrated to $\hat p$. For each
+pair we compare buying YES on the cheaper venue at $c^{\text{YES}} = \min(p^P,p^K) + \kappa$ with buying NO on the dearer
+venue at $c^{\text{NO}} = 1 - \max(p^P,p^K) + \kappa$, and take the larger calibrated edge if it is
+positive. Optionally, only pairs flagged by the consensus rule are kept.
+
+*Strategies.* naive Kelly · robust Kelly for several $\Gamma$ · equal weight (the budget split
+evenly) · random (mean over random subsets and stakes).
+
+*Metrics.* With per-round log-returns $r_t = \log W_t/W_{t-1}$: cumulative log-growth
+$\sum r_t$, max drawdown $\max_t(1 - W_t/\max_{s\le t}W_s)$, and the Sharpe-like ratio
+$\bar r/s_r\sqrt{8}$ (8 FOMC meetings a year, no risk-free rate).
