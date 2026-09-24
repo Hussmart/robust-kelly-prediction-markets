@@ -172,3 +172,85 @@ replacement, refit $f$, and take the percentile interval of $f^{(b)}(p)$.
 $\hat p = f(p)$ is the point estimate and $d = \hat p - q_{0.05}$ is the
 downward half-width fed to the robust optimiser.
 
+---
+
+## 5. Robust Kelly allocation (`src/optimization/`)
+
+### 5.1 Model
+
+Bet $i \in \{1..N\}$ costs $c_i$ and pays 1 on a win, so the net odds are
+$b_i = (1-c_i)/c_i$. Staking a fraction $f_i$ of wealth returns $1 + f_i b_i$ on a win and
+$1 - f_i$ on a loss. For bets that are independent and settled with reinvestment, expected
+log-growth is separable:
+$$
+g(f;p) = \sum_{i=1}^N \big[\,p_i \log(1 + f_i b_i) + (1-p_i)\log(1 - f_i)\,\big].
+$$
+Naive Kelly maximises $g(f;\hat p)$ subject to $\sum_i f_i \le F$ and $0 \le f_i \le f_{\max}$.
+This problem is convex, and its KKT conditions reduce to a scalar root search
+(`naive_kelly.py`). With a slack budget, $f_i = \hat p_i - (1-\hat p_i)/b_i$, the classical Kelly fraction.
+
+### 5.2 Budgeted uncertainty (Bertsimas & Sim, 2004)
+
+The estimate $\hat p_i$ is uncertain. Let $d_i \ge 0$ be its maximal *downward* error.
+Only downward deviations hurt because $\partial g/\partial p_i = D_i(f_i) \ge 0$. At most $\Gamma$
+estimates are wrong at once:
+$$
+\mathcal U(\Gamma) = \Big\{ p : p_i = \hat p_i - d_i z_i,\ 0 \le z_i \le 1,\ \textstyle\sum_i z_i \le \Gamma \Big\}.
+$$
+$\Gamma = 0$ trusts every estimate, $\Gamma = N$ assumes they are all at their worst, and
+intermediate $\Gamma$ is the "price of robustness" dial. The robust problem is
+$$
+\max_{f}\ \min_{p \in \mathcal U(\Gamma)} g(f;p).
+$$
+
+### 5.3 Robust counterpart via LP duality
+
+For fixed $f$, write $B_i(f_i) = \log(1-f_i)$ and $D_i(f_i) = \log(1+f_ib_i) - \log(1-f_i) \ge 0$. Then
+$g(f;p) = \sum_i B_i + \sum_i p_i D_i$ is **linear in $p$**, and the inner minimisation is
+$$
+\min_{p\in\mathcal U} g = \sum_i\big[B_i + \hat p_i D_i\big] - \underbrace{\max_{z}\Big\{\sum_i d_i D_i\, z_i \ :\ \sum_i z_i \le \Gamma,\ 0\le z_i\le 1\Big\}}_{\text{LP in } z}.
+$$
+Assign $\lambda \ge 0$ to the row $\sum z_i \le \Gamma$ and $\nu_i \ge 0$ to $z_i \le 1$. The LP dual is
+$$
+\min_{\lambda,\nu \ge 0}\ \Gamma\lambda + \sum_i \nu_i \quad\text{s.t.}\quad \lambda + \nu_i \ge d_i D_i(f_i)\ \ \forall i.
+$$
+By strong duality the max-min collapses to a single maximisation:
+$$
+\boxed{\ \max_{f,\lambda,\nu}\ \sum_i\big[B_i(f_i) + \hat p_i D_i(f_i)\big] - \Gamma\lambda - \sum_i\nu_i
+\ \ \text{s.t.}\ \ \lambda + \nu_i \ge d_i D_i(f_i),\ \ \sum_i f_i \le F,\ \ 0 \le f_i \le f_{\max},\ \lambda,\nu\ge0\ }
+$$
+
+**Why it is a MILP and not a convex program.** $D_i$ is the sum of a concave term
+($\log(1+f b_i)$) and a convex term ($-\log(1-f)$), so the constraint
+$\lambda + \nu_i \ge d_iD_i(f_i)$ is non-convex. We use a piecewise-linear interpolant on the
+grid $0 = \phi_0 < \dots < \phi_K = f_{\max}$ (quadratic spacing, dense near 0) and the
+incremental formulation
+$$
+f_i = \sum_{k=1}^K \delta_{ik}(\phi_k - \phi_{k-1}),\qquad 0\le\delta_{ik}\le1,\qquad
+\delta_{i,k+1} \le y_{ik} \le \delta_{ik},\ \ y_{ik}\in\{0,1\},
+$$
+so that segments fill in order. Without the binaries the relaxation could fill segments
+in the order that minimises $D_i$ and understate the worst-case loss. All of $B_i$, $D_i$
+and the objective are then linear in $\delta$. The result is a MILP solved with Pyomo + HiGHS
+(`robust_kelly.py`).
+
+### 5.4 What the tests verify (`tests/test_robust_kelly.py`)
+
+| Property | Test |
+|---|---|
+| $\Gamma = 0$ reduces to naive Kelly | stakes within one grid step, growth equal to $10^{-4}$ |
+| $\Gamma \ge N$ reduces to Kelly at $\hat p - d$ | same |
+| The duality is right | for $\Gamma \in \{1,2,3\}$ the MILP optimum equals an **independently computed** max-min solution (enumerate the vertices of $\mathcal U$, solve the epigraph problem with SLSQP) |
+| The greedy worst-case evaluator is exact | equals vertex enumeration to $10^{-12}$, and is linear between integer $\Gamma$ |
+| Optimal worst-case value is non-increasing in $\Gamma$ | monotone in $\Gamma = 0..4$ |
+| Robust stakes are never worse in the worst case than naive stakes | for $\Gamma \in \{1,2,4\}$ |
+
+### 5.5 Modelling caveats (stated in the README as well)
+
+* The separable objective treats the bets of a round as independent. Buckets of one FOMC
+  meeting are mutually exclusive. The **backtest settles bets with the true payoffs**, so the
+  reported P&L does not depend on this assumption. Only the optimiser's *model* does.
+* The budget $F < 1$ and cap $f_{\max}$ keep wealth strictly positive even if every
+  mutually exclusive bet of a round loses.
+* Fees, spread and slippage are lumped into a constant cost $\kappa$ added to the price.
+
