@@ -136,3 +136,39 @@ like, because no one could trade it. The same gap between two active, tightly qu
 a candidate real mispricing. Requiring both signals trades recall for precision. This is
 the "joint anomaly instead of a single signal" principle, applied to prices and liquidity.
 
+---
+
+## 4. Calibration (`src/calibration/`)
+
+Raw prices $p$ are not necessarily probabilities. We seek a map $f$ with
+$\mathbb P(Y = 1 \mid p) = f(p)$.
+
+**Platt scaling.** $f(p) = \sigma(a\,\operatorname{logit}(p) + b)$ with
+$\sigma(z) = 1/(1+e^{-z})$. $(a,b) = (1,0)$ is perfect calibration, $a < 1$ means the market is
+over-confident, $a > 1$ under-confident. The penalised negative log-likelihood
+$$
+\mathcal L(a,b) = -\sum_i \big[y_i \log q_i + (1-y_i)\log(1-q_i)\big] + \tfrac{\rho}{2}\big[(a-1)^2 + b^2\big],\quad q_i = \sigma(a x_i + b),\ x_i=\operatorname{logit}(p_i)
+$$
+is strictly convex with gradient $X^\top(q - y) + \rho(\theta - \theta_0)$ and Hessian
+$X^\top \mathrm{diag}(q(1-q))X + \rho I$ ($X = [x, \mathbf 1]$, $\theta_0 = (1,0)$). We solve it by Newton's
+method. The ridge $\rho = 10^{-3}$ toward the identity keeps $(a,b)$ finite when the sample is
+perfectly separable, which occurs with few resolved markets. The tests check parameter
+recovery on simulated data and agreement with scikit-learn's logistic regression.
+
+**Isotonic regression.** $f$ is the non-decreasing least-squares fit
+$\min_f \sum_i w_i (y_i - f(p_i))^2$ s.t. $f$ non-decreasing, solved exactly by
+pool-adjacent-violators (Barlow et al., 1972): scan left to right and whenever a block's
+mean falls below its predecessor's, merge the two into their weighted mean. Our
+implementation is checked against `sklearn.isotonic.IsotonicRegression` to $10^{-10}$.
+
+**Metrics.** Brier score $\frac1n\sum(q_i - y_i)^2$; expected calibration error with $B$
+equal-mass bins,
+$\mathrm{ECE} = \sum_{b=1}^{B}\frac{n_b}{n}\,|\bar y_b - \bar q_b|$; and log-loss.
+
+**Uncertainty of a calibrated probability.** Snapshots of one market (or one meeting, as
+its buckets are mutually exclusive) are strongly dependent, so resampling snapshots
+understates variance. We use a **cluster bootstrap**: resample whole meetings with
+replacement, refit $f$, and take the percentile interval of $f^{(b)}(p)$.
+$\hat p = f(p)$ is the point estimate and $d = \hat p - q_{0.05}$ is the
+downward half-width fed to the robust optimiser.
+
