@@ -59,7 +59,7 @@ class HttpClient:
     ) -> None:
         """Configure rate, retry budget, backoff base (seconds) and request timeout."""
         self.session = requests.Session()
-        self.session.headers["User-Agent"] = "prediction-market-arbitrage-research/0.1"
+        self.session.headers["User-Agent"] = "robust-kelly-prediction-markets-research/0.1"
         self.limiter = RateLimiter(calls_per_second)
         self.max_retries = max_retries
         self.backoff_base = backoff_base

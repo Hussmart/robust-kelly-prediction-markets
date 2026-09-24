@@ -1,6 +1,12 @@
-# Calibrated Mispricing Detection & Robust Capital Allocation for Prediction Markets
+# Robust Kelly Allocation under Budgeted Uncertainty: Calibrated Probabilities from Prediction Markets
 
-[![tests](https://github.com/Hussmart/prediction-market-arbitrage/actions/workflows/ci.yml/badge.svg)](https://github.com/Hussmart/prediction-market-arbitrage/actions/workflows/ci.yml)
+[![tests](https://github.com/Hussmart/robust-kelly-prediction-markets/actions/workflows/ci.yml/badge.svg)](https://github.com/Hussmart/robust-kelly-prediction-markets/actions/workflows/ci.yml)
+
+<!-- BEGIN:summary -->
+> **Question.** Kelly sizing maximises expected log-growth but is fragile to errors in the estimated win probabilities. Can *robust optimisation* protect a prediction-market portfolio, and are market prices already calibrated probabilities?  
+> **Method.** Bertsimas–Sim budgeted uncertainty on the probabilities (at most Γ of N estimates wrong at once); LP duality turns the max-min problem into a single-stage robust counterpart of expected log-growth, solved as a **MILP** (Pyomo + HiGHS) because the sensitivity is neither convex nor concave, and checked against an independent max-min solution. Probabilities come from Platt/isotonic calibration with Bayesian intervals, tested walk-forward on 2,623 out-of-time predictions and 524 bets.  
+> **Answer.** On real data the answer is negative and reported as such: prices are already well calibrated (recalibration *raises* Brier score), the bets return +1.5% (90% CI -5.8% to +8.8%), so robust and naive Kelly are statistically indistinguishable. Where the truth is known (simulation), naive Kelly loses 34% of its growth when two of six estimates are wrong and robust Kelly with a matched Γ recovers 89% of the oracle's growth.
+<!-- END:summary -->
 
 A research pipeline that (1) pairs equivalent contracts on **Polymarket** and **Kalshi**, (2) looks for
 cross-venue mispricings with an anomaly detector that must agree on *price and liquidity*,

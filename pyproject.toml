@@ -1,5 +1,5 @@
 [project]
-name = "prediction-market-arbitrage"
+name = "robust-kelly-prediction-markets"
 version = "0.1.0"
 description = "Calibrated mispricing detection and robust (Bertsimas-Sim) Kelly allocation on Polymarket/Kalshi."
 requires-python = ">=3.10"

@@ -38,6 +38,32 @@ def _ci(lo: float, hi: float, nd: int = 3) -> str:
     return f"[{lo:.{nd}f}, {hi:.{nd}f}]"
 
 
+def block_summary() -> str:
+    """Four-line abstract: question, method, answer."""
+    cal = _csv("universe_calibration.csv").set_index("method")
+    bets = _csv("universe_bets_overall.csv").iloc[0]
+    sim = _csv("simulation_summary.csv").pivot(index="strategy", columns="k_bad", values="mean")
+    loss = 1 - sim.loc["naive_kelly", 2] / sim.loc["naive_kelly", 0]
+    kept = sim.loc["robust_G2", 2] / sim.loc["oracle_kelly", 2]
+    return "\n".join([
+        "> **Question.** Kelly sizing maximises expected log-growth but is fragile to errors in the estimated win "
+        "probabilities. Can *robust optimisation* protect a prediction-market portfolio, and are market prices "
+        "already calibrated probabilities?  ",
+        "> **Method.** Bertsimas–Sim budgeted uncertainty on the probabilities (at most Γ of N estimates wrong at "
+        "once); LP duality turns the max-min problem into a single-stage robust counterpart of expected "
+        "log-growth, solved as a **MILP** (Pyomo + HiGHS) because the sensitivity is neither convex nor concave, and "
+        "checked against an independent max-min solution. Probabilities come from Platt/isotonic calibration with "
+        "Bayesian intervals, tested walk-forward on "
+        f"{int(cal.loc['raw', 'n']):,} out-of-time predictions and {int(bets.bets)} bets.  ",
+        f"> **Answer.** On real data the answer is negative and reported as such: prices are already well calibrated "
+        f"(recalibration *raises* Brier score), the bets return {bets.mean_roi * 100:+.1f}% "
+        f"(90% CI {bets.roi_lo * 100:+.1f}% to {bets.roi_hi * 100:+.1f}%), so robust and naive Kelly are statistically "
+        f"indistinguishable. Where the truth is known (simulation), naive Kelly loses {loss * 100:.0f}% of its growth "
+        f"when two of six estimates are wrong and robust Kelly with a matched Γ recovers "
+        f"{kept * 100:.0f}% of the oracle's growth.",
+    ])
+
+
 def block_headline() -> str:
     """The headline findings as bullets."""
     dec = _csv("decision_time_divergence.csv").iloc[0]
@@ -173,7 +199,7 @@ def block_fomc_backtest() -> str:
 
 
 BLOCKS = {
-    "headline": block_headline, "universe_calibration": block_universe_calibration,
+    "summary": block_summary, "headline": block_headline, "universe_calibration": block_universe_calibration,
     "universe_backtest": block_universe_backtest, "universe_inference": block_universe_inference,
     "universe_sensitivity": block_universe_sensitivity, "simulation": block_simulation,
     "fomc_findings": block_fomc_findings, "fomc_calibration": block_fomc_calibration, "fomc_backtest": block_fomc_backtest,
