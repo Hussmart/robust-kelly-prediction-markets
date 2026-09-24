@@ -11,3 +11,14 @@ addopts = "-q"
 markers = [
     "network: test hits a live public API (deselect with -m 'not network')",
 ]
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I", "UP"]
+ignore = ["B905", "E501", "E741", "UP037", "UP035", "E402", "UP017"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["I001"]

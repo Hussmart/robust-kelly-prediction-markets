@@ -22,3 +22,5 @@ Thumbs.db
 .idea/
 docs/methodology.full.md
 results/.tmp/
+*.log
+warm*.log

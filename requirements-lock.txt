@@ -1,0 +1,15 @@
+highspy==1.15.1
+ipykernel==7.3.0
+lazypredict==0.3.0
+matplotlib==3.11.2
+nbconvert==7.17.1
+nbformat==5.11.1
+networkx==3.6.1
+numpy==2.4.6
+pandas==3.0.6
+pyarrow==25.0.1
+pyomo==6.10.1
+pytest==9.1.1
+requests==2.34.2
+scikit-learn==1.9.1
+scipy==1.17.1
