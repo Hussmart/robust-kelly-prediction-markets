@@ -40,7 +40,7 @@ Snapshots lie on a grid $t_k = \tau - k\,\delta$ with $\delta = 6$ h over the 21
 before $\tau$ (the first 72 h are reserved as a warm-up for volatility estimates).
 
 **Implied probabilities.** Kalshi reports top-of-book quotes $(b_t, a_t)$. When the
-quote is valid ($0 < b_t < a_t < 1$, $a_t - b_t \le 0.5$) we use the mid
+quote is valid ($0 \le b_t < a_t \le 1$, $a_t - b_t \le 0.5$) we use the mid
 $p^{K}_t = (a_t + b_t)/2$, and otherwise the last trade. Polymarket's public API
 exposes a price series but no historical book, so $p^P_t$ is that series. Both are
 carried forward as-of for at most 48 h. Snapshots where either price is older are
@@ -275,3 +275,47 @@ evenly) · random (mean over random subsets and stakes).
 *Metrics.* With per-round log-returns $r_t = \log W_t/W_{t-1}$: cumulative log-growth
 $\sum r_t$, max drawdown $\max_t(1 - W_t/\max_{s\le t}W_s)$, and the Sharpe-like ratio
 $\bar r/s_r\sqrt{8}$ (8 FOMC meetings a year, no risk-free rate).
+
+
+---
+
+## 7. Broad-universe evaluation (`src/collectors/universe.py`, `src/backtest/universe_backtest.py`)
+
+The FOMC panel has one to three candidate bets per round, which cannot separate allocation
+methods. To test calibration and allocation with many concurrent, roughly independent bets and
+with real losses, we use a second experiment on resolved binary Polymarket markets across all
+topics.
+
+**Population and cohorts (only ex-ante information).** The population is *all* resolved binary
+Polymarket markets scheduled to end in the study period (69,729), from which a uniform random sample
+of 12,000 (fixed seed) is drawn to bound API cost. Decision dates are $T_k = T_0 + 14k$ days. A market
+enters cohort $k$ iff its *scheduled* end date $e$ satisfies $T_k + 3 \le e < T_k + 14$ (days), it is still
+open at $T_k$, and it has been active before $T_k$: at least 10 hourly price changes in the previous
+6 days, the last one at most 24 h ago, and an entry price in $[0.03, 0.97]$. Every one of these
+conditions is observable at $T_k$ and none uses the outcome.
+
+Two natural-looking selections were **rejected because they leak the outcome**, and both were
+found in review (`docs/audit.md`): (i) defining cohorts by the *actual* resolution time, since
+markets that resolve early are disproportionately YES; (ii) requiring a minimum *lifetime* trading
+volume, since a cheap market that goes on to resolve YES trades at high prices and therefore
+accumulates more dollar volume than one that drifts to zero (in an exploratory build that used it,
+the gap between the observed YES frequency and the price of cheap markets was $-1.0$¢ in the lowest
+volume quintile and $+3$ to $+6$¢ in the higher ones). Bets settle at the actual resolution time,
+before $T_{k+1}$ for almost all markets; the share settling later, a capital overlap the backtest
+ignores, is reported.
+
+**Calibration, expanding window.** For cohort $k$ the calibrator is fitted on cohorts $<k$, all
+of which resolved before $T_k$. Markets are weighted by $1/(\text{markets of their event})$, so a
+many-outcome event counts once. Uncertainty is the Laplace interval of Section 4, or an event-level
+cluster bootstrap in the sensitivity runs.
+
+**Candidates.** For every market compare buying YES at $\text{price} + \kappa$ with buying NO at
+$1 - \text{price} + \kappa$ and take the side with the larger calibrated edge $\hat p - c$. Keep positive-edge
+candidates, at most one per event (bets of one event are dependent, often mutually exclusive), and the
+$M = 12$ largest edges.
+
+**Inference.** Differences between strategies are assessed with a **paired bootstrap over rounds**:
+the same rounds are resampled for both strategies, and the interval of
+$\sum_t (r^A_t - r^B_t)$ is reported. Brier improvements of the calibrators over the raw price use an
+event-level cluster bootstrap. With a few dozen rounds the intervals are wide, and that is reported,
+not hidden.
