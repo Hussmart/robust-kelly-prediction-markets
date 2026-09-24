@@ -14,6 +14,7 @@ import nbformat as nbf
 from nbconvert.preprocessors import ExecutePreprocessor
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 NB_DIR = ROOT / "notebooks"
 
 SETUP = """import sys, pathlib
