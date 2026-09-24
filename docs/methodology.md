@@ -94,3 +94,45 @@ $$
 It is forward-looking by construction, so it is only ever used as a label and never
 as a feature.
 
+---
+
+## 3. Anomaly detection (`src/anomaly/`)
+
+### 3.1 Isolation Forest
+
+Feature vector $x_t$: $|\ell_t|$, $|d_t|$, Kalshi spread, Roll spread (Polymarket),
+log-volumes, both OFIs and their gap $|\mathrm{OFI}^P - \mathrm{OFI}^K|$, both
+volatilities, $\log(1+\text{hours to close})$ and log-staleness. The level of the price
+itself is excluded on purpose. Isolation Forest (Liu, Ting & Zhou, 2008) grows random
+trees that split on a random feature at a random threshold. The score
+$$
+s(x, n) = 2^{-\,\mathbb E[h(x)]/c(n)}, \qquad c(n) = 2H(n-1) - \tfrac{2(n-1)}{n}
+$$
+uses the mean path length $h$ to isolate $x$ and the mean unsuccessful-search path
+length $c(n)$ of a binary search tree as normaliser ($H$ is the harmonic number).
+Scores near 1 mean "easy to isolate". Median imputation and robust scaling are fitted on
+the training snapshots only.
+
+### 3.2 Graph consensus rule
+
+Let $G = (P \cup K, E)$ be the bipartite graph whose edges are the equivalent pairs
+$i \sim j$ of Section 1. Every contract has exactly one twin, so $G$ is a perfect
+matching. `validate_graph` asserts this, and an ambiguous mapping would raise. Each edge
+carries the divergence series $\ell_t$. Two independent detectors are attached to it:
+
+$$
+S^{\text{price}}_t = \mathbb 1\Big\{ \frac{|\ell_t| - m}{1.4826\,\mathrm{MAD}} \ge z_{\min} \Big\},
+\qquad
+S^{\text{liq}}_t = \mathbb 1\big\{ V^P_t \ge \underline V^P,\ V^K_t \ge \underline V^K,\ \text{stale}^{P,K}_t \le 12\text{h},\ s^K_t \le \bar s \big\}
+$$
+
+where $m$ and MAD are the median and median absolute deviation of $|\ell|$ on the
+training snapshots, $\underline V$ are training-volume quantiles (25%), and $\bar s$ the
+75% quantile of the quoted spread. A snapshot is flagged iff
+$S^{\text{price}}_t \wedge S^{\text{liq}}_t$.
+
+*Rationale.* A large gap between two thin or stale books is what a false positive looks
+like, because no one could trade it. The same gap between two active, tightly quoted books is
+a candidate real mispricing. Requiring both signals trades recall for precision. This is
+the "joint anomaly instead of a single signal" principle, applied to prices and liquidity.
+
