@@ -1,0 +1,13 @@
+[project]
+name = "prediction-market-arbitrage"
+version = "0.1.0"
+description = "Calibrated mispricing detection and robust (Bertsimas-Sim) Kelly allocation on Polymarket/Kalshi."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "network: test hits a live public API (deselect with -m 'not network')",
+]

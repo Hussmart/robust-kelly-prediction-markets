@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Data: raw API pulls and processed tables are large and fully reproducible
+# from the collectors. Only the small curated sample under data/sample/ and
+# the hand-built mapping table are versioned.
+data/raw/
+data/processed/
+!data/sample/
+!data/mappings/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
